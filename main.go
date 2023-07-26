@@ -33,14 +33,15 @@ func run() error {
 	if err := group.AddUser(user1); err != nil {
 		return fmt.Errorf("error adding user 1; %w", err)
 	}
-	cipherText, err := group.States[0].Protect(message)
+	cipherText, err := group.States[0].Encrypt(message)
 	if err != nil {
 		return fmt.Errorf("error protecting message; %w", err)
 	}
-	plainText, err := group.States[1].Unprotect(cipherText)
+	plainText, err := group.States[1].Decrypt(cipherText)
 	if err != nil {
 		return fmt.Errorf("error unprotecting message; %w", err)
 	}
-	log.Printf("cipher (%d): %x, plaintext: %x (%s)", len(cipherText.Ciphertext), cipherText.Ciphertext, plainText, plainText)
+	log.Printf("cipher (%d): %x, plaintext: %x (%s)",
+		len(cipherText.CipherText.Ciphertext), cipherText.CipherText.Ciphertext, plainText, plainText)
 	return nil
 }
