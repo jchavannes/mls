@@ -10,7 +10,6 @@ import (
 type CipherText struct {
 	GroupId             []byte
 	Epoch               uint32
-	ContentType         uint8
 	SenderDataNonce     []byte
 	EncryptedSenderData []byte
 	AuthenticatedData   []byte
@@ -24,7 +23,7 @@ func (c *CipherText) Decrypt(state *State) ([]byte, error) {
 	if c.Epoch != uint32(state.State.Epoch) {
 		return nil, fmt.Errorf("error ciphertext epoch mismatch")
 	}
-	sdAAD := getSenderDataAAD(c.GroupId, c.Epoch, c.ContentType, c.SenderDataNonce)
+	sdAAD := getSenderDataAAD(c.GroupId, c.Epoch, c.SenderDataNonce)
 	sdAead, err := state.State.CipherSuite.NewAEAD(state.State.Keys.SenderDataKey)
 	if err != nil {
 		return nil, fmt.Errorf("error getting sender state cipher AEAD; %w", err)
@@ -45,7 +44,7 @@ func (c *CipherText) Decrypt(state *State) ([]byte, error) {
 		return nil, fmt.Errorf("error getting application keys; %w", err)
 	}
 	state.State.Keys.ApplicationKeys.Erase(sender, generation)
-	aad := getContentAAD(c.GroupId, c.Epoch, c.ContentType, c.AuthenticatedData, c.SenderDataNonce, c.EncryptedSenderData)
+	aad := getContentAAD(c.GroupId, c.Epoch, c.AuthenticatedData, c.SenderDataNonce, c.EncryptedSenderData)
 	aead, err := state.State.CipherSuite.NewAEAD(keys.Key)
 	if err != nil {
 		return nil, fmt.Errorf("error getting state cipher AEAD; %w", err)
@@ -55,8 +54,8 @@ func (c *CipherText) Decrypt(state *State) ([]byte, error) {
 		return nil, fmt.Errorf("error opening content; %w", err)
 	}
 	stream = syntax.NewReadStream(content)
-	var mlsContent mls.MLSPlaintextContent
-	var signature mls.Signature
+	var mlsContent PlaintextContent
+	var signature Signature
 	if _, err := stream.Read(&mlsContent); err != nil {
 		return nil, fmt.Errorf("error reading MLS content; %w", err)
 	}

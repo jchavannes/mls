@@ -2,9 +2,20 @@ package mls
 
 import (
 	"fmt"
-	"github.com/cisco/go-mls"
 	syntax "github.com/cisco/go-tls-syntax"
 )
+
+type PlaintextContent struct {
+	Application *ApplicationData
+}
+
+type ApplicationData struct {
+	Data []byte `tls:"head=4"`
+}
+
+type Signature struct {
+	Data []byte `tls:"head=2"`
+}
 
 type PlainText struct {
 	State             *State
@@ -12,13 +23,13 @@ type PlainText struct {
 	Epoch             uint64
 	Sender            uint32
 	AuthenticatedData []byte
-	Content           mls.MLSPlaintextContent
-	Signature         mls.Signature
+	Content           PlaintextContent
+	Signature         Signature
 }
 
 func NewPlainText(state *State, message []byte) *PlainText {
-	content := mls.MLSPlaintextContent{
-		Application: &mls.ApplicationData{
+	content := PlaintextContent{
+		Application: &ApplicationData{
 			Data: message,
 		},
 	}
@@ -45,7 +56,7 @@ func (p *PlainText) Encrypt() (*CipherText, error) {
 	senderData := stream.Data()
 	senderDataNonce := make([]byte, p.State.State.CipherSuite.Constants().NonceSize)
 	copy(senderDataNonce, randomBytes(len(senderDataNonce)))
-	senderDataAADVal := getSenderDataAAD(p.State.State.GroupID, uint32(p.State.State.Epoch), uint8(mls.ContentTypeApplication), senderDataNonce)
+	senderDataAADVal := getSenderDataAAD(p.State.State.GroupID, uint32(p.State.State.Epoch), senderDataNonce)
 	sdAead, _ := p.State.State.CipherSuite.NewAEAD(p.State.State.Keys.SenderDataKey)
 	senderDataEncrypted := sdAead.Seal(nil, senderDataNonce, senderData, senderDataAADVal)
 	stream2 := syntax.NewWriteStream()
@@ -56,13 +67,12 @@ func (p *PlainText) Encrypt() (*CipherText, error) {
 		return nil, fmt.Errorf("error writing signature to stream; %w", err)
 	}
 	content := stream2.Data()
-	aad := getContentAAD(p.State.State.GroupID, uint32(p.State.State.Epoch), uint8(mls.ContentTypeApplication), p.AuthenticatedData, senderDataNonce, senderDataEncrypted)
+	aad := getContentAAD(p.State.State.GroupID, uint32(p.State.State.Epoch), p.AuthenticatedData, senderDataNonce, senderDataEncrypted)
 	aead, _ := p.State.State.CipherSuite.NewAEAD(keys.Key)
 	contentCt := aead.Seal(nil, applyGuard(keys.Nonce, reuseGuard), content, aad)
 	return &CipherText{
 		GroupId:             p.State.State.GroupID,
 		Epoch:               uint32(p.State.State.Epoch),
-		ContentType:         uint8(mls.ContentTypeApplication),
 		AuthenticatedData:   p.AuthenticatedData,
 		SenderDataNonce:     senderDataNonce,
 		EncryptedSenderData: senderDataEncrypted,
@@ -72,10 +82,10 @@ func (p *PlainText) Encrypt() (*CipherText, error) {
 
 type plainTextToSign struct {
 	GroupID           []byte `tls:"head=1"`
-	Epoch             mls.Epoch
-	Sender            mls.Sender
+	Epoch             uint64
+	Sender            uint32
 	AuthenticatedData []byte `tls:"head=4"`
-	Content           mls.MLSPlaintextContent
+	Content           PlaintextContent
 }
 
 func (p *PlainText) toBeSigned() ([]byte, error) {
@@ -86,8 +96,8 @@ func (p *PlainText) toBeSigned() ([]byte, error) {
 	}
 	if err := stream.Write(plainTextToSign{
 		GroupID:           p.GroupId,
-		Epoch:             mls.Epoch(p.Epoch),
-		Sender:            mls.Sender{Type: mls.SenderTypeMember, Sender: p.Sender},
+		Epoch:             p.Epoch,
+		Sender:            p.Sender,
 		AuthenticatedData: p.AuthenticatedData,
 		Content:           p.Content,
 	}); err != nil {
@@ -105,6 +115,6 @@ func (p *PlainText) sign() error {
 	if err != nil {
 		return fmt.Errorf("error signing plaintext; %w", err)
 	}
-	p.Signature = mls.Signature{Data: sig}
+	p.Signature = Signature{Data: sig}
 	return nil
 }
