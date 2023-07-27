@@ -17,3 +17,17 @@ func randomBytes(size int) []byte {
 	rand.Read(out)
 	return out
 }
+
+func applyGuard(nonceIn []byte, reuseGuard [4]byte) []byte {
+	nonceOut := dup(nonceIn)
+	for i := 0; i < 4; i++ {
+		nonceOut[i] ^= reuseGuard[i]
+	}
+	return nonceOut
+}
+
+func dup(in []byte) []byte {
+	out := make([]byte, len(in))
+	copy(out, in)
+	return out
+}

@@ -54,3 +54,13 @@ func (s *State) Decrypt(cipherText *CipherText) ([]byte, error) {
 	}
 	return message, nil
 }
+
+func (s *State) GetContext() mls.GroupContext {
+	return mls.GroupContext{
+		GroupID:                 s.State.GroupID,
+		Epoch:                   s.State.Epoch,
+		TreeHash:                s.State.Tree.RootHash(),
+		ConfirmedTranscriptHash: s.State.ConfirmedTranscriptHash,
+		Extensions:              s.State.Extensions,
+	}
+}
