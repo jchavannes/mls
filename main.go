@@ -43,6 +43,6 @@ func run() error {
 		return fmt.Errorf("error unencrypting message; %w", err)
 	}
 	log.Printf("cipher (%d): %x, unencrypted: %x (%s)",
-		len(cipherText.CipherText.Ciphertext), cipherText.CipherText.Ciphertext, unencrypted, unencrypted)
+		len(cipherText.Ciphertext), cipherText.Ciphertext, unencrypted, unencrypted)
 	return nil
 }

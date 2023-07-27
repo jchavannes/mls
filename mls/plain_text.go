@@ -7,26 +7,27 @@ import (
 )
 
 type PlainText struct {
-	State     *State
-	PlainText *mls.MLSPlaintext
+	State             *State
+	GroupId           []byte
+	Epoch             uint64
+	Sender            uint32
+	AuthenticatedData []byte
+	Content           mls.MLSPlaintextContent
+	Signature         mls.Signature
 }
 
 func NewPlainText(state *State, message []byte) *PlainText {
-	return &PlainText{
-		State: state,
-		PlainText: &mls.MLSPlaintext{
-			GroupID: state.State.GroupID,
-			Epoch:   state.State.Epoch,
-			Sender: mls.Sender{
-				Type:   mls.SenderTypeMember,
-				Sender: uint32(state.State.Index),
-			},
-			Content: mls.MLSPlaintextContent{
-				Application: &mls.ApplicationData{
-					Data: message,
-				},
-			},
+	content := mls.MLSPlaintextContent{
+		Application: &mls.ApplicationData{
+			Data: message,
 		},
+	}
+	return &PlainText{
+		State:   state,
+		GroupId: state.State.GroupID,
+		Epoch:   uint64(state.State.Epoch),
+		Sender:  uint32(state.State.Index),
+		Content: content,
 	}
 }
 
@@ -44,30 +45,29 @@ func (p *PlainText) Encrypt() (*CipherText, error) {
 	senderData := stream.Data()
 	senderDataNonce := make([]byte, p.State.State.CipherSuite.Constants().NonceSize)
 	copy(senderDataNonce, randomBytes(len(senderDataNonce)))
-	senderDataAADVal := getSenderDataAAD(p.State.State.GroupID, p.State.State.Epoch, mls.ContentTypeApplication, senderDataNonce)
+	senderDataAADVal := getSenderDataAAD(p.State.State.GroupID, uint32(p.State.State.Epoch), uint8(mls.ContentTypeApplication), senderDataNonce)
 	sdAead, _ := p.State.State.CipherSuite.NewAEAD(p.State.State.Keys.SenderDataKey)
 	senderDataEncrypted := sdAead.Seal(nil, senderDataNonce, senderData, senderDataAADVal)
 	stream2 := syntax.NewWriteStream()
-	if err := stream2.Write(p.PlainText.Content); err != nil {
+	if err := stream2.Write(p.Content); err != nil {
 		return nil, fmt.Errorf("error writing plaintext to stream; %w", err)
 	}
-	if err := stream2.Write(p.PlainText.Signature); err != nil {
+	if err := stream2.Write(p.Signature); err != nil {
 		return nil, fmt.Errorf("error writing signature to stream; %w", err)
 	}
 	content := stream2.Data()
-	aad := getContentAAD(p.State.State.GroupID, p.State.State.Epoch, mls.ContentTypeApplication, p.PlainText.AuthenticatedData, senderDataNonce, senderDataEncrypted)
+	aad := getContentAAD(p.State.State.GroupID, uint32(p.State.State.Epoch), uint8(mls.ContentTypeApplication), p.AuthenticatedData, senderDataNonce, senderDataEncrypted)
 	aead, _ := p.State.State.CipherSuite.NewAEAD(keys.Key)
 	contentCt := aead.Seal(nil, applyGuard(keys.Nonce, reuseGuard), content, aad)
-	cipherText := &mls.MLSCiphertext{
-		GroupID:             p.State.State.GroupID,
-		Epoch:               p.State.State.Epoch,
-		ContentType:         mls.ContentTypeApplication,
-		AuthenticatedData:   p.PlainText.AuthenticatedData,
+	return &CipherText{
+		GroupId:             p.State.State.GroupID,
+		Epoch:               uint32(p.State.State.Epoch),
+		ContentType:         uint8(mls.ContentTypeApplication),
+		AuthenticatedData:   p.AuthenticatedData,
 		SenderDataNonce:     senderDataNonce,
 		EncryptedSenderData: senderDataEncrypted,
 		Ciphertext:          contentCt,
-	}
-	return &CipherText{CipherText: cipherText}, nil
+	}, nil
 }
 
 type plainTextToSign struct {
@@ -85,11 +85,11 @@ func (p *PlainText) toBeSigned() ([]byte, error) {
 		return nil, fmt.Errorf("error writing group context; %w", err)
 	}
 	if err := stream.Write(plainTextToSign{
-		GroupID:           p.PlainText.GroupID,
-		Epoch:             p.PlainText.Epoch,
-		Sender:            p.PlainText.Sender,
-		AuthenticatedData: p.PlainText.AuthenticatedData,
-		Content:           p.PlainText.Content,
+		GroupID:           p.GroupId,
+		Epoch:             mls.Epoch(p.Epoch),
+		Sender:            mls.Sender{Type: mls.SenderTypeMember, Sender: p.Sender},
+		AuthenticatedData: p.AuthenticatedData,
+		Content:           p.Content,
 	}); err != nil {
 		return nil, fmt.Errorf("error writing plaintext to sign; %w", err)
 	}
@@ -105,6 +105,6 @@ func (p *PlainText) sign() error {
 	if err != nil {
 		return fmt.Errorf("error signing plaintext; %w", err)
 	}
-	p.PlainText.Signature = mls.Signature{Data: sig}
+	p.Signature = mls.Signature{Data: sig}
 	return nil
 }

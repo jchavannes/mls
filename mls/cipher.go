@@ -8,22 +8,28 @@ import (
 )
 
 type CipherText struct {
-	CipherText *mls.MLSCiphertext
+	GroupId             []byte
+	Epoch               uint32
+	ContentType         uint8
+	SenderDataNonce     []byte
+	EncryptedSenderData []byte
+	AuthenticatedData   []byte
+	Ciphertext          []byte
 }
 
 func (c *CipherText) Decrypt(state *State) ([]byte, error) {
-	if !bytes.Equal(c.CipherText.GroupID, state.State.GroupID) {
+	if !bytes.Equal(c.GroupId, state.State.GroupID) {
 		return nil, fmt.Errorf("error ciphertext group ID mismatch")
 	}
-	if c.CipherText.Epoch != state.State.Epoch {
+	if c.Epoch != uint32(state.State.Epoch) {
 		return nil, fmt.Errorf("error ciphertext epoch mismatch")
 	}
-	sdAAD := getSenderDataAAD(c.CipherText.GroupID, c.CipherText.Epoch, c.CipherText.ContentType, c.CipherText.SenderDataNonce)
+	sdAAD := getSenderDataAAD(c.GroupId, c.Epoch, c.ContentType, c.SenderDataNonce)
 	sdAead, err := state.State.CipherSuite.NewAEAD(state.State.Keys.SenderDataKey)
 	if err != nil {
 		return nil, fmt.Errorf("error getting sender state cipher AEAD; %w", err)
 	}
-	sd, err := sdAead.Open(nil, c.CipherText.SenderDataNonce, c.CipherText.EncryptedSenderData, sdAAD)
+	sd, err := sdAead.Open(nil, c.SenderDataNonce, c.EncryptedSenderData, sdAAD)
 	if err != nil {
 		return nil, fmt.Errorf("error opening sender data; %w", err)
 	}
@@ -39,12 +45,12 @@ func (c *CipherText) Decrypt(state *State) ([]byte, error) {
 		return nil, fmt.Errorf("error getting application keys; %w", err)
 	}
 	state.State.Keys.ApplicationKeys.Erase(sender, generation)
-	aad := getContentAAD(c.CipherText.GroupID, c.CipherText.Epoch, c.CipherText.ContentType, c.CipherText.AuthenticatedData, c.CipherText.SenderDataNonce, c.CipherText.EncryptedSenderData)
+	aad := getContentAAD(c.GroupId, c.Epoch, c.ContentType, c.AuthenticatedData, c.SenderDataNonce, c.EncryptedSenderData)
 	aead, err := state.State.CipherSuite.NewAEAD(keys.Key)
 	if err != nil {
 		return nil, fmt.Errorf("error getting state cipher AEAD; %w", err)
 	}
-	content, err := aead.Open(nil, applyGuard(keys.Nonce, reuseGuard), c.CipherText.Ciphertext, aad)
+	content, err := aead.Open(nil, applyGuard(keys.Nonce, reuseGuard), c.Ciphertext, aad)
 	if err != nil {
 		return nil, fmt.Errorf("error opening content; %w", err)
 	}
@@ -61,18 +67,13 @@ func (c *CipherText) Decrypt(state *State) ([]byte, error) {
 		return nil, fmt.Errorf("error unmarshaling MLS content; %w", err)
 	}
 	plainText := &PlainText{
-		State: state,
-		PlainText: &mls.MLSPlaintext{
-			GroupID: state.State.GroupID,
-			Epoch:   state.State.Epoch,
-			Sender: mls.Sender{
-				Type:   mls.SenderTypeMember,
-				Sender: uint32(sender),
-			},
-			AuthenticatedData: c.CipherText.AuthenticatedData,
-			Content:           mlsContent,
-			Signature:         signature,
-		},
+		State:             state,
+		GroupId:           state.State.GroupID,
+		Epoch:             uint64(state.State.Epoch),
+		Sender:            uint32(sender),
+		AuthenticatedData: c.AuthenticatedData,
+		Content:           mlsContent,
+		Signature:         signature,
 	}
 	keyPackage, ok := state.State.Tree.KeyPackage(sender)
 	if !ok {
@@ -85,9 +86,6 @@ func (c *CipherText) Decrypt(state *State) ([]byte, error) {
 	}
 	if !state.State.Scheme.Verify(sigPubKey, toBeSigned, signature.Data) {
 		return nil, fmt.Errorf("error verifying signature")
-	}
-	if mlsContent.Type() != mls.ContentTypeApplication {
-		return nil, fmt.Errorf("error plaintext content type is not application")
 	}
 	return mlsContent.Application.Data, nil
 }

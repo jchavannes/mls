@@ -1,18 +1,17 @@
 package mls
 
 import (
-	"github.com/cisco/go-mls"
 	syntax "github.com/cisco/go-tls-syntax"
 )
 
 type senderDataAAD struct {
 	GroupID         []byte `tls:"head=1"`
-	Epoch           mls.Epoch
-	ContentType     mls.ContentType
+	Epoch           uint32
+	ContentType     uint8
 	SenderDataNonce []byte `tls:"head=1"`
 }
 
-func getSenderDataAAD(groupId []byte, epoch mls.Epoch, contentType mls.ContentType, nonce []byte) []byte {
+func getSenderDataAAD(groupId []byte, epoch uint32, contentType uint8, nonce []byte) []byte {
 	stream := syntax.NewWriteStream()
 	if err := stream.Write(senderDataAAD{
 		GroupID:         groupId,
@@ -27,14 +26,14 @@ func getSenderDataAAD(groupId []byte, epoch mls.Epoch, contentType mls.ContentTy
 
 type contentAAD struct {
 	GroupID             []byte `tls:"head=1"`
-	Epoch               mls.Epoch
-	ContentType         mls.ContentType
+	Epoch               uint32
+	ContentType         uint8
 	AuthenticatedData   []byte `tls:"head=4"`
 	SenderDataNonce     []byte `tls:"head=1"`
 	EncryptedSenderData []byte `tls:"head=1"`
 }
 
-func getContentAAD(groupId []byte, epoch mls.Epoch, contentType mls.ContentType, authenticatedData []byte,
+func getContentAAD(groupId []byte, epoch uint32, contentType uint8, authenticatedData []byte,
 	nonce []byte, encSenderData []byte) []byte {
 	stream := syntax.NewWriteStream()
 	if err := stream.Write(contentAAD{
