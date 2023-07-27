@@ -39,22 +39,6 @@ func (s *State) AddUser(user *User) (*State, error) {
 	return &State{State: state}, nil
 }
 
-func (s *State) Encrypt(message []byte) (*CipherText, error) {
-	cipherText, err := s.State.Protect(message)
-	if err != nil {
-		return nil, fmt.Errorf("error protecting message; %w", err)
-	}
-	return &CipherText{CipherText: cipherText}, nil
-}
-
-func (s *State) Decrypt(cipherText *CipherText) ([]byte, error) {
-	message, err := s.State.Unprotect(cipherText.CipherText)
-	if err != nil {
-		return nil, fmt.Errorf("error unprotecting ciphertext; %w", err)
-	}
-	return message, nil
-}
-
 func (s *State) GetContext() mls.GroupContext {
 	return mls.GroupContext{
 		GroupID:                 s.State.GroupID,

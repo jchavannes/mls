@@ -38,11 +38,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("error protecting message; %w", err)
 	}
-	unencryprted, err := group.States[1].Decrypt(cipherText)
+	unencrypted, err := cipherText.Decrypt(group.States[1])
 	if err != nil {
-		return fmt.Errorf("error unprotecting message; %w", err)
+		return fmt.Errorf("error unencrypting message; %w", err)
 	}
-	log.Printf("cipher (%d): %x, unencryprted: %x (%s)",
-		len(cipherText.CipherText.Ciphertext), cipherText.CipherText.Ciphertext, unencryprted, unencryprted)
+	log.Printf("cipher (%d): %x, unencrypted: %x (%s)",
+		len(cipherText.CipherText.Ciphertext), cipherText.CipherText.Ciphertext, unencrypted, unencrypted)
 	return nil
 }

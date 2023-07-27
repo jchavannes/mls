@@ -78,11 +78,11 @@ type plainTextToSign struct {
 	Content           mls.MLSPlaintextContent
 }
 
-func (p *PlainText) sign() error {
+func (p *PlainText) toBeSigned() ([]byte, error) {
 	groupContext := p.State.GetContext()
 	stream := syntax.NewWriteStream()
 	if err := stream.Write(groupContext); err != nil {
-		return fmt.Errorf("error writing group context; %w", err)
+		return nil, fmt.Errorf("error writing group context; %w", err)
 	}
 	if err := stream.Write(plainTextToSign{
 		GroupID:           p.PlainText.GroupID,
@@ -91,9 +91,16 @@ func (p *PlainText) sign() error {
 		AuthenticatedData: p.PlainText.AuthenticatedData,
 		Content:           p.PlainText.Content,
 	}); err != nil {
-		return fmt.Errorf("error writing plaintext to sign; %w", err)
+		return nil, fmt.Errorf("error writing plaintext to sign; %w", err)
 	}
-	toBeSigned := stream.Data()
+	return stream.Data(), nil
+}
+
+func (p *PlainText) sign() error {
+	toBeSigned, err := p.toBeSigned()
+	if err != nil {
+		return fmt.Errorf("error getting plaintext to sign; %w", err)
+	}
 	sig, err := p.State.State.Scheme.Sign(&p.State.State.IdentityPriv, toBeSigned)
 	if err != nil {
 		return fmt.Errorf("error signing plaintext; %w", err)
